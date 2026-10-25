@@ -40,6 +40,8 @@
   .opt{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
   .opt span{display:inline-flex;align-items:center;gap:6px;background:var(--soft);color:var(--main-dark);border-radius:20px;padding:6px 6px 6px 12px;font-size:15px;font-weight:600}
   .opt span button{border:0;background:rgba(0,0,0,.12);color:#333;width:22px;height:22px;border-radius:50%;font-size:14px;line-height:22px;padding:0}
+  .cod{display:inline-block;margin:2px 0 0 4px;font-size:14px;font-weight:700;color:var(--warn);background:var(--warn-bg);border-radius:8px;padding:1px 8px}
+  .sum{text-align:center;font-size:18px;font-weight:700;background:var(--soft);color:var(--main-dark);border-radius:12px;padding:10px;margin:0 0 6px}
   .place{display:inline-block;margin-top:2px;font-size:14px;font-weight:700;color:#1a5fb4;background:#eef3fb;border-radius:8px;padding:1px 8px}
   .result{margin-top:14px;padding:14px;border-radius:12px;line-height:1.6}
   .result.ok{background:var(--soft)}
@@ -105,8 +107,8 @@
       <label for="place">放置位置</label>
       <input id="place" placeholder="點下方選項，或自己輸入" oninput="markSel('place')">
       <div class="chips" id="placeChips"></div>
-      <label for="note">備註（物流等，可不填）</label>
-      <input id="note" placeholder="例如 黑貓">
+      <label for="note">備註（可不填）</label>
+      <input id="note" placeholder="點下方選項，或自己輸入">
       <div class="chips" id="chips"></div>
       <label>包裹照片（可多張，最多 10 張）</label>
       <div class="pbtns">
@@ -204,7 +206,7 @@ let pending = [], residents = [], scanner = null, scanning = false, curToken = '
 let shots = [];            // 這次登記要上傳的照片（已壓縮）
 const PHOTOS = {};          // 包裹編號 → 照片 ID
 const PIC_CACHE = {};       // 已讀取過的照片
-let OPTS = { kinds: ['一般', '冷藏', '冷凍', '大型', '掛號／文件', '易碎'], places: ['包裹架', '冷藏櫃', '管理室內', '大型物品區'] };
+let OPTS = { kinds: ['包裹', '掛號', '物品轉出', '物品轉入', '現金轉出', '現金轉入'], places: ['大廳', '宅配室', '櫃台', '抽屜', '冷凍', '冷藏'] };
 try { const o = JSON.parse(localStorage.getItem('pkgOpts')); if (o && o.kinds) OPTS = o; } catch (e) {}
 let editOpts = null;
 
@@ -297,7 +299,7 @@ async function saveOpts() {
   } catch (e) { toast(e.message); }
 }
 
-['黑貓', '新竹物流', '郵局', '蝦皮', '宅配通', '嘉里', '7-11', '全家'].forEach(c => {
+['貨到付款'].forEach(c => {
   const b = document.createElement('button'); b.type = 'button'; b.textContent = c;
   b.onclick = () => { const n = $('note'); n.value = n.value ? n.value + '、' + c : c; };
   $('chips').appendChild(b);
@@ -398,7 +400,7 @@ function renderPending() {
     const g = groups[u], n = g.reduce((s, p) => s + p.qty, 0);
     return '<div class="group"><div class="ghead"><span>' + esc(u) + '</span><span class="muted">' + g.length + ' 筆・' + n + ' 件</span></div>' +
       g.map(p => '<div class="item"><div>' + esc(p.time) + '・' + p.qty + ' 件' + (p.kind ? '・' + esc(p.kind) : '') + (p.note ? '・' + esc(p.note) : '') +
-        '<span class="badge' + (p.days >= 3 ? ' old' : '') + '">' + (p.days >= 1 ? '已放 ' + p.days + ' 天' : '今天') + '</span>' + (p.place ? '<br><span class="place">📍 ' + esc(p.place) + '</span>' : '') + (p.by ? '<div class="muted">登記：' + esc(p.by) + '</div>' : '') + '</div>' +
+        '<span class="badge' + (p.days >= 3 ? ' old' : '') + '">' + (p.days >= 1 ? '已放 ' + p.days + ' 天' : '今天') + '</span>' + (p.place ? '<br><span class="place">📍 ' + esc(p.place) + '</span>' : '') + codTag(p) + (p.by ? '<div class="muted">登記：' + esc(p.by) + '</div>' : '') + '</div>' +
         '<div class="acts">' + picBtn(p) + '<button class="small s-ok" onclick="manualClaim(\'' + esc(p.id) + '\',\'' + esc(u) + '\')">手動領取</button>' +
         '<button class="small s-del" onclick="delPkg(\'' + esc(p.id) + '\',\'' + esc(u) + '\')">刪除</button></div></div>').join('') +
       '</div>';
@@ -443,14 +445,27 @@ async function onScan(text) {
     if (!j.data.length) { $('scanResult').innerHTML = '<div class="result bad">' + esc(j.unit) + ' 目前沒有未領的包裹。</div>'; return; }
     $('scanResult').innerHTML =
       '<div class="unitBig">' + esc(j.unit) + '</div>' +
+      '<p class="sum" id="scanSum"></p>' +
       '<p class="muted">請把下列包裹交給住戶，沒拿的請取消勾選：</p>' +
       j.data.map(p => '<div class="check"><input type="checkbox" value="' + esc(p.id) + '" checked id="ck' + esc(p.id) + '">' +
-        '<label for="ck' + esc(p.id) + '" style="flex:1;margin:0;font-weight:400">' + esc(p.time) + ' 登記・' + p.qty + ' 件' + (p.kind ? '・' + esc(p.kind) : '') + (p.note ? '・' + esc(p.note) : '') + (p.place ? '<br><span class="place">📍 ' + esc(p.place) + '</span>' : '') + (p.by ? '<div class="muted">登記：' + esc(p.by) + '</div>' : '') + '</label>' + picBtn(p) + '</div>').join('') +
+        '<label for="ck' + esc(p.id) + '" style="flex:1;margin:0;font-weight:400">' + esc(p.time) + ' 登記・' + p.qty + ' 件' + (p.kind ? '・' + esc(p.kind) : '') + (p.note ? '・' + esc(p.note) : '') + (p.place ? '<br><span class="place">📍 ' + esc(p.place) + '</span>' : '') + codTag(p) + (p.by ? '<div class="muted">登記：' + esc(p.by) + '</div>' : '') + '</label>' + picBtn(p) + '</div>').join('') +
       '<button class="btn primary" onclick="confirmClaim()">確認領取</button>';
+    SCAN_QTY = {}; j.data.forEach(p => SCAN_QTY[p.id] = p.qty);
+    document.querySelectorAll('#scanResult input[type=checkbox]').forEach(c => c.onchange = scanSum);
+    scanSum();
   } catch (e) {
     $('scanResult').innerHTML = '<div class="result bad">' + esc(e.message) + '</div>';
   }
 }
+
+let SCAN_QTY = {};
+function scanSum() {
+  const all = Object.keys(SCAN_QTY), sel = [...document.querySelectorAll('#scanResult input:checked')].map(i => i.value);
+  const n = ids => ids.reduce((s, id) => s + (SCAN_QTY[id] || 0), 0);
+  $('scanSum').innerHTML = '共 ' + all.length + ' 筆、' + n(all) + ' 件' +
+    (sel.length === all.length ? '（全部交付）' : '<br>本次交付 ' + sel.length + ' 筆、' + n(sel) + ' 件');
+}
+function codTag(p) { return /貨到付款/.test(p.note || '') ? '<span class="cod">💰 貨到付款</span>' : ''; }
 
 async function confirmClaim() {
   const ids = [...document.querySelectorAll('#scanResult input:checked')].map(i => i.value);
