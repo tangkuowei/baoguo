@@ -36,6 +36,11 @@
   .qty input{text-align:center}
   .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
   .chips button{border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 12px;font-size:15px}
+  .chips button.sel{background:var(--main);border-color:var(--main);color:#fff;font-weight:700}
+  .opt{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .opt span{display:inline-flex;align-items:center;gap:6px;background:var(--soft);color:var(--main-dark);border-radius:20px;padding:6px 6px 6px 12px;font-size:15px;font-weight:600}
+  .opt span button{border:0;background:rgba(0,0,0,.12);color:#333;width:22px;height:22px;border-radius:50%;font-size:14px;line-height:22px;padding:0}
+  .place{display:inline-block;margin-top:2px;font-size:14px;font-weight:700;color:#1a5fb4;background:#eef3fb;border-radius:8px;padding:1px 8px}
   .result{margin-top:14px;padding:14px;border-radius:12px;line-height:1.6}
   .result.ok{background:var(--soft)}
   .result.bad{background:var(--warn-bg);color:var(--warn)}
@@ -94,8 +99,14 @@
         <input id="qty" type="number" value="1" min="1" inputmode="numeric">
         <button type="button" onclick="stepQty(1)">＋</button>
       </div>
-      <label for="note">備註（物流、類型，可不填）</label>
-      <input id="note" placeholder="例如 黑貓、冷藏">
+      <label for="kind">包裹種類</label>
+      <input id="kind" placeholder="點下方選項，或自己輸入" oninput="markSel('kind')">
+      <div class="chips" id="kindChips"></div>
+      <label for="place">放置位置</label>
+      <input id="place" placeholder="點下方選項，或自己輸入" oninput="markSel('place')">
+      <div class="chips" id="placeChips"></div>
+      <label for="note">備註（物流等，可不填）</label>
+      <input id="note" placeholder="例如 黑貓">
       <div class="chips" id="chips"></div>
       <label>包裹照片（可多張，最多 10 張）</label>
       <div class="pbtns">
@@ -160,6 +171,17 @@
       <input id="cfgPin" type="password" placeholder="ADMIN_PIN 設定的密碼">
       <button class="btn primary" onclick="saveCfg()">儲存並測試連線</button>
     </div>
+    <div class="card">
+      <h2>包裹種類、放置位置的選項</h2>
+      <p class="muted">登記頁上的按鈕。所有管理員共用，改完按「儲存選項」。</p>
+      <label>包裹種類</label>
+      <div class="opt" id="optKinds"></div>
+      <div class="row" style="margin-top:8px"><input id="newKind" placeholder="新增種類，例如 生鮮" maxlength="20"><button class="small s-ok" onclick="addOpt('kinds','newKind')">新增</button></div>
+      <label>放置位置</label>
+      <div class="opt" id="optPlaces"></div>
+      <div class="row" style="margin-top:8px"><input id="newPlace" placeholder="新增位置，例如 B 架第 2 層" maxlength="20"><button class="small s-ok" onclick="addOpt('places','newPlace')">新增</button></div>
+      <button class="btn primary" onclick="saveOpts()">儲存選項</button>
+    </div>
   </section>
 </main>
 
@@ -182,6 +204,9 @@ let pending = [], residents = [], scanner = null, scanning = false, curToken = '
 let shots = [];            // 這次登記要上傳的照片（已壓縮）
 const PHOTOS = {};          // 包裹編號 → 照片 ID
 const PIC_CACHE = {};       // 已讀取過的照片
+let OPTS = { kinds: ['一般', '冷藏', '冷凍', '大型', '掛號／文件', '易碎'], places: ['包裹架', '冷藏櫃', '管理室內', '大型物品區'] };
+try { const o = JSON.parse(localStorage.getItem('pkgOpts')); if (o && o.kinds) OPTS = o; } catch (e) {}
+let editOpts = null;
 
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('on');
@@ -210,7 +235,7 @@ function showTab(name) {
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
   if (name === 'list') loadPending();
   if (name === 'res') loadRes();
-  if (name === 'set') { $('cfgUrl').value = CFG.url || ''; $('cfgPin').value = CFG.pin || ''; $('cfgStaff').value = CFG.staff || ''; }
+  if (name === 'set') { $('cfgUrl').value = CFG.url || ''; $('cfgPin').value = CFG.pin || ''; $('cfgStaff').value = CFG.staff || ''; editOpts = JSON.parse(JSON.stringify(OPTS)); renderOptEditor(); }
   window.scrollTo(0, 0);
 }
 
@@ -222,14 +247,57 @@ async function saveCfg() {
   if (!CFG.staff) { toast('請填寫你的名字'); $('cfgStaff').focus(); return; }
   showWho();
   try { localStorage.setItem('pkgCfg', JSON.stringify(CFG)); } catch (e) {}
-  try { await api('ping'); toast('✅ 連線成功'); loadUnits(); showTab('add'); }
+  try { await api('ping'); toast('✅ 連線成功'); loadUnits(); loadOptions(); showTab('add'); }
   catch (e) { toast(e.message); }
 }
 
 function showWho() { $('who').textContent = CFG.staff ? '　·　' + CFG.staff : ''; }
 
 /* ---------- 登記 ---------- */
-['黑貓', '新竹物流', '郵局', '蝦皮', '宅配通', '嘉里', '冷藏', '大型'].forEach(c => {
+/* ---------- 種類／位置選項 ---------- */
+function renderChips() {
+  [['kind', 'kinds'], ['place', 'places']].forEach(([f, k]) => {
+    $(f + 'Chips').innerHTML = OPTS[k].map(v => '<button type="button" data-v="' + esc(v) + '">' + esc(v) + '</button>').join('');
+    $(f + 'Chips').querySelectorAll('button').forEach(b => b.onclick = () => {
+      $(f).value = $(f).value === b.dataset.v ? '' : b.dataset.v; markSel(f);
+    });
+    markSel(f);
+  });
+}
+function markSel(f) {
+  $(f + 'Chips').querySelectorAll('button').forEach(b => b.classList.toggle('sel', b.dataset.v === $(f).value.trim()));
+}
+async function loadOptions() {
+  try {
+    const j = await api('options'); OPTS = j.data;
+    try { localStorage.setItem('pkgOpts', JSON.stringify(OPTS)); } catch (e) {}
+    renderChips();
+  } catch (e) {}
+}
+function renderOptEditor() {
+  [['kinds', 'optKinds'], ['places', 'optPlaces']].forEach(([k, id]) => {
+    $(id).innerHTML = editOpts[k].length
+      ? editOpts[k].map((v, i) => '<span>' + esc(v) + '<button onclick="delOpt(\'' + k + '\',' + i + ')">×</button></span>').join('')
+      : '<p class="muted" style="margin:0">（沒有選項，登記時可自己輸入）</p>';
+  });
+}
+function addOpt(k, id) {
+  const v = $(id).value.trim();
+  if (!v) return;
+  if (editOpts[k].includes(v)) { toast('已經有這個選項'); return; }
+  editOpts[k].push(v); $(id).value = ''; renderOptEditor();
+}
+function delOpt(k, i) { editOpts[k].splice(i, 1); renderOptEditor(); }
+async function saveOpts() {
+  try {
+    const j = await api('saveOptions', { data: editOpts });
+    OPTS = j.data; editOpts = JSON.parse(JSON.stringify(OPTS));
+    try { localStorage.setItem('pkgOpts', JSON.stringify(OPTS)); } catch (e) {}
+    renderChips(); renderOptEditor(); toast('✅ 選項已儲存');
+  } catch (e) { toast(e.message); }
+}
+
+['黑貓', '新竹物流', '郵局', '蝦皮', '宅配通', '嘉里', '7-11', '全家'].forEach(c => {
   const b = document.createElement('button'); b.type = 'button'; b.textContent = c;
   b.onclick = () => { const n = $('note'); n.value = n.value ? n.value + '、' + c : c; };
   $('chips').appendChild(b);
@@ -287,12 +355,12 @@ async function addPkg() {
   if (!unit) { toast('請輸入戶號'); $('unit').focus(); return; }
   const btn = $('btnAdd'); btn.disabled = true; btn.textContent = shots.length ? '上傳照片中…' : '登記中…';
   try {
-    const j = await api('addPackage', { unit: unit, qty: $('qty').value, note: $('note').value.trim(), photos: shots });
+    const j = await api('addPackage', { unit: unit, qty: $('qty').value, kind: $('kind').value.trim(), place: $('place').value.trim(), note: $('note').value.trim(), photos: shots });
     const pic = j.photos ? '，照片 ' + j.photos + ' 張已存檔' : '';
     $('addResult').innerHTML = j.bound
       ? '<div class="result ok">✅ 已登記 <b>' + esc(j.unit) + '</b>，' + j.qty + ' 件' + pic + '<br>下一步：打開「LINE 官方帳號」App，找到 <b>' + esc(j.unit) + '</b> 的聊天室，拍包裹照片傳給住戶。</div>'
       : '<div class="result bad">✅ 已登記 <b>' + esc(j.unit) + '</b>，' + j.qty + ' 件' + pic + '<br>⚠ 這一戶還沒綁定官方賴（或尚未核准），請改用其他方式通知住戶，領取時用「未領清單」手動標記。</div>';
-    $('unit').value = ''; $('qty').value = 1; $('note').value = ''; shots = []; renderThumbs();
+    $('unit').value = ''; $('qty').value = 1; $('kind').value = ''; $('place').value = ''; $('note').value = ''; markSel('kind'); markSel('place'); shots = []; renderThumbs();
   } catch (e) { toast(e.message); }
   btn.disabled = false; btn.textContent = '登記包裹';
 }
@@ -329,8 +397,8 @@ function renderPending() {
   $('pendingList').innerHTML = Object.keys(groups).map(u => {
     const g = groups[u], n = g.reduce((s, p) => s + p.qty, 0);
     return '<div class="group"><div class="ghead"><span>' + esc(u) + '</span><span class="muted">' + g.length + ' 筆・' + n + ' 件</span></div>' +
-      g.map(p => '<div class="item"><div>' + esc(p.time) + '・' + p.qty + ' 件' + (p.note ? '・' + esc(p.note) : '') +
-        '<span class="badge' + (p.days >= 3 ? ' old' : '') + '">' + (p.days >= 1 ? '已放 ' + p.days + ' 天' : '今天') + '</span>' + (p.by ? '<div class="muted">登記：' + esc(p.by) + '</div>' : '') + '</div>' +
+      g.map(p => '<div class="item"><div>' + esc(p.time) + '・' + p.qty + ' 件' + (p.kind ? '・' + esc(p.kind) : '') + (p.note ? '・' + esc(p.note) : '') +
+        '<span class="badge' + (p.days >= 3 ? ' old' : '') + '">' + (p.days >= 1 ? '已放 ' + p.days + ' 天' : '今天') + '</span>' + (p.place ? '<br><span class="place">📍 ' + esc(p.place) + '</span>' : '') + (p.by ? '<div class="muted">登記：' + esc(p.by) + '</div>' : '') + '</div>' +
         '<div class="acts">' + picBtn(p) + '<button class="small s-ok" onclick="manualClaim(\'' + esc(p.id) + '\',\'' + esc(u) + '\')">手動領取</button>' +
         '<button class="small s-del" onclick="delPkg(\'' + esc(p.id) + '\',\'' + esc(u) + '\')">刪除</button></div></div>').join('') +
       '</div>';
@@ -377,7 +445,7 @@ async function onScan(text) {
       '<div class="unitBig">' + esc(j.unit) + '</div>' +
       '<p class="muted">請把下列包裹交給住戶，沒拿的請取消勾選：</p>' +
       j.data.map(p => '<div class="check"><input type="checkbox" value="' + esc(p.id) + '" checked id="ck' + esc(p.id) + '">' +
-        '<label for="ck' + esc(p.id) + '" style="flex:1;margin:0;font-weight:400">' + esc(p.time) + ' 登記・' + p.qty + ' 件' + (p.note ? '・' + esc(p.note) : '') + (p.by ? '<div class="muted">登記：' + esc(p.by) + '</div>' : '') + '</label>' + picBtn(p) + '</div>').join('') +
+        '<label for="ck' + esc(p.id) + '" style="flex:1;margin:0;font-weight:400">' + esc(p.time) + ' 登記・' + p.qty + ' 件' + (p.kind ? '・' + esc(p.kind) : '') + (p.note ? '・' + esc(p.note) : '') + (p.place ? '<br><span class="place">📍 ' + esc(p.place) + '</span>' : '') + (p.by ? '<div class="muted">登記：' + esc(p.by) + '</div>' : '') + '</label>' + picBtn(p) + '</div>').join('') +
       '<button class="btn primary" onclick="confirmClaim()">確認領取</button>';
   } catch (e) {
     $('scanResult').innerHTML = '<div class="result bad">' + esc(e.message) + '</div>';
@@ -428,7 +496,8 @@ async function removeRes(uid, unit) {
 
 /* ---------- 開始 ---------- */
 showWho();
-if (CFG.url && CFG.staff) { showTab('add'); loadUnits(); }
+renderChips();
+if (CFG.url && CFG.staff) { showTab('add'); loadUnits(); loadOptions(); }
 else { showTab('set'); if (CFG.url) toast('請填寫你的名字（經手人）'); }
 </script>
 </body>
