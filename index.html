@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>包裹管理</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root{--bg:#f4f6f8;--card:#fff;--ink:#1f2933;--sub:#6b7785;--line:#e3e8ee;--main:#0f9d58;--main-dark:#0b7a44;--warn:#d93025;--warn-bg:#fdecea;--soft:#e8f5ee}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;font-size:17px;padding-bottom:84px}
+  header{background:var(--main);color:#fff;padding:14px 16px;position:sticky;top:0;z-index:5}
+  header h1{margin:0;font-size:20px}
+  main{padding:16px;max-width:640px;margin:0 auto}
+  section{display:none}
+  section.on{display:block}
+  nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;z-index:5;padding-bottom:env(safe-area-inset-bottom)}
+  nav button{flex:1;border:0;background:none;padding:10px 2px 8px;font-size:13px;color:var(--sub);display:flex;flex-direction:column;align-items:center;gap:2px}
+  nav button span{font-size:22px}
+  nav button.on{color:var(--main);font-weight:700}
+  .card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  h2{font-size:18px;margin:0 0 12px}
+  label{display:block;font-weight:600;margin:14px 0 6px}
+  input{width:100%;font-size:18px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+  input:focus{outline:2px solid var(--main);border-color:transparent}
+  button{font-family:inherit}
+  .btn{display:block;width:100%;border:0;border-radius:12px;padding:14px;font-size:18px;font-weight:700;margin-top:16px;cursor:pointer}
+  .primary{background:var(--main);color:#fff}
+  .primary:active{background:var(--main-dark)}
+  .ghost{background:#fff;color:var(--main);border:2px solid var(--main)}
+  .small{border:0;border-radius:8px;padding:8px 12px;font-size:15px;font-weight:600;cursor:pointer}
+  .s-ok{background:var(--soft);color:var(--main-dark)}
+  .s-del{background:var(--warn-bg);color:var(--warn)}
+  .qty{display:flex;gap:8px}
+  .qty button{width:56px;font-size:24px;border:1px solid var(--line);border-radius:10px;background:#fff}
+  .qty input{text-align:center}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .chips button{border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 12px;font-size:15px}
+  .result{margin-top:14px;padding:14px;border-radius:12px;line-height:1.6}
+  .result.ok{background:var(--soft)}
+  .result.bad{background:var(--warn-bg);color:var(--warn)}
+  .muted{color:var(--sub);font-size:15px}
+  .group{border-top:1px solid var(--line);padding:12px 0}
+  .group:first-child{border-top:0}
+  .ghead{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:19px}
+  .item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;flex-wrap:wrap}
+  .badge{display:inline-block;font-size:13px;padding:2px 8px;border-radius:10px;background:#eef1f4;color:var(--sub);margin-left:6px}
+  .badge.old{background:var(--warn-bg);color:var(--warn);font-weight:700}
+  .acts{display:flex;gap:6px}
+  .summary{display:flex;gap:10px;margin-bottom:12px}
+  .summary div{flex:1;background:#fff;border-radius:12px;padding:10px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .summary b{display:block;font-size:24px}
+  .summary .alert b{color:var(--warn)}
+  #reader{width:100%;border-radius:12px;overflow:hidden;background:#000;min-height:40px}
+  .unitBig{font-size:34px;font-weight:800;color:var(--main-dark);text-align:center;margin:6px 0 10px}
+  .check{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+  .check input{width:24px;height:24px}
+  .row{display:flex;gap:8px}
+  .row input{flex:1}
+  .row button{flex:none;width:auto;margin:0}
+  #toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:#1f2933;color:#fff;padding:10px 18px;border-radius:20px;font-size:15px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%;text-align:center;z-index:9}
+  #toast.on{opacity:1}
+  .pbtns{display:flex;gap:8px}
+  .pbtns label{flex:1;margin:0;text-align:center;border:2px dashed #b8c4cf;border-radius:12px;padding:12px 4px;font-weight:600;color:var(--sub);cursor:pointer;background:#fafbfc}
+  .pbtns input{display:none}
+  .thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+  .thumbs div{position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:#eee}
+  .thumbs img{width:100%;height:100%;object-fit:cover}
+  .thumbs button{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:16px;line-height:26px;padding:0}
+  .s-pic{background:#eef3fb;color:#1a5fb4}
+  #viewer{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:20;display:none;flex-direction:column}
+  #viewer.on{display:flex}
+  #viewer .vtop{display:flex;justify-content:space-between;align-items:center;color:#fff;padding:12px 16px}
+  #viewer .vtop button{border:0;background:#fff;border-radius:8px;padding:8px 14px;font-size:16px;font-weight:700}
+  #viewer .vbody{flex:1;overflow-y:auto;padding:0 12px 24px;display:flex;flex-direction:column;gap:12px;align-items:center}
+  #viewer img{max-width:100%;border-radius:8px}
+  #viewer .vload{color:#ccc;padding:20px}
+</style>
+</head>
+<body>
+<header><h1>📦 社區包裹管理<span id="who" style="font-size:15px;font-weight:400;opacity:.9"></span></h1></header>
+
+<main>
+  <!-- 登記包裹 -->
+  <section id="tab-add">
+    <div class="card">
+      <h2>登記包裹</h2>
+      <label for="unit">戶號</label>
+      <input id="unit" list="unitList" placeholder="例如 A5-2" autocomplete="off">
+      <datalist id="unitList"></datalist>
+      <label for="qty">件數</label>
+      <div class="qty">
+        <button type="button" onclick="stepQty(-1)">－</button>
+        <input id="qty" type="number" value="1" min="1" inputmode="numeric">
+        <button type="button" onclick="stepQty(1)">＋</button>
+      </div>
+      <label for="note">備註（物流、類型，可不填）</label>
+      <input id="note" placeholder="例如 黑貓、冷藏">
+      <div class="chips" id="chips"></div>
+      <label>包裹照片（可多張，最多 10 張）</label>
+      <div class="pbtns">
+        <label>📷 拍照<input type="file" accept="image/*" capture="environment" onchange="addPhotos(this)"></label>
+        <label>🖼️ 從相簿選<input type="file" accept="image/*" multiple onchange="addPhotos(this)"></label>
+      </div>
+      <p class="muted" style="margin:8px 0 0">小技巧：先用手機相機拍好，再按「從相簿選」。同一批照片等一下在官方賴也能直接從相簿傳給住戶。</p>
+      <div class="thumbs" id="thumbs"></div>
+      <button class="btn primary" id="btnAdd" onclick="addPkg()">登記包裹</button>
+      <div id="addResult"></div>
+    </div>
+  </section>
+
+  <!-- 未領清單 -->
+  <section id="tab-list">
+    <div class="summary" id="summary"></div>
+    <div class="card">
+      <div class="row">
+        <input id="search" placeholder="搜尋戶號" oninput="renderPending()">
+        <button class="small s-ok" onclick="loadPending()">重新整理</button>
+      </div>
+      <div id="pendingList" style="margin-top:8px"></div>
+    </div>
+  </section>
+
+  <!-- 掃描領取 -->
+  <section id="tab-scan">
+    <div class="card">
+      <h2>掃描領取</h2>
+      <p class="muted">請住戶在官方賴按「領取包裹」，出示 QR Code 給你掃描。</p>
+      <div id="reader"></div>
+      <button class="btn primary" id="btnScan" onclick="toggleScan()">開始掃描</button>
+      <div id="scanResult"></div>
+    </div>
+  </section>
+
+  <!-- 住戶 -->
+  <section id="tab-res">
+    <div class="card">
+      <h2>待審核的綁定申請</h2>
+      <p class="muted">請確認申請人真的是該戶住戶再按核准。</p>
+      <div id="resPending"></div>
+    </div>
+    <div class="card">
+      <h2>已綁定住戶</h2>
+      <input id="resSearch" placeholder="搜尋戶號或名稱" oninput="renderRes()">
+      <div id="resApproved" style="margin-top:8px"></div>
+    </div>
+  </section>
+
+  <!-- 設定 -->
+  <section id="tab-set">
+    <div class="card">
+      <h2>系統設定</h2>
+      <p class="muted">第一次使用請填寫。資料只存在這支手機的瀏覽器裡。</p>
+      <label for="cfgUrl">系統網址（Apps Script 部署網址）</label>
+      <input id="cfgUrl" placeholder="https://script.google.com/macros/s/.../exec">
+      <label for="cfgStaff">你的名字（經手人）</label>
+      <input id="cfgStaff" maxlength="20" placeholder="例如 王小明">
+      <p class="muted" style="margin:6px 0 0">登記包裹、確認領取、審核住戶時，會記下這個名字。每支手機填使用者自己的名字。</p>
+      <label for="cfgPin">管理員密碼</label>
+      <input id="cfgPin" type="password" placeholder="ADMIN_PIN 設定的密碼">
+      <button class="btn primary" onclick="saveCfg()">儲存並測試連線</button>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button data-tab="add" onclick="showTab('add')"><span>📝</span>登記</button>
+  <button data-tab="list" onclick="showTab('list')"><span>📋</span>未領清單</button>
+  <button data-tab="scan" onclick="showTab('scan')"><span>📷</span>掃描領取</button>
+  <button data-tab="res" onclick="showTab('res')"><span>🏠</span>住戶</button>
+  <button data-tab="set" onclick="showTab('set')"><span>⚙️</span>設定</button>
+</nav>
+<div id="toast"></div>
+<div id="viewer"><div class="vtop"><span id="vTitle"></span><button onclick="closeViewer()">關閉</button></div><div class="vbody" id="vBody"></div></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let CFG = { url: '', pin: '', staff: '' };
+try { CFG = JSON.parse(localStorage.getItem('pkgCfg')) || CFG; } catch (e) {}
+let pending = [], residents = [], scanner = null, scanning = false, curToken = '';
+let shots = [];            // 這次登記要上傳的照片（已壓縮）
+const PHOTOS = {};          // 包裹編號 → 照片 ID
+const PIC_CACHE = {};       // 已讀取過的照片
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), 2600);
+}
+
+async function api(action, data) {
+  if (!CFG.url) { showTab('set'); throw new Error('請先到「設定」填寫系統網址'); }
+  let r;
+  try {
+    r = await fetch(CFG.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ action: action, pin: CFG.pin, staff: CFG.staff || '' }, data || {}))
+    });
+  } catch (e) { throw new Error('連線失敗，請檢查網路或系統網址'); }
+  let j;
+  try { j = await r.json(); } catch (e) { throw new Error('系統網址不正確，或尚未部署成「所有人」可存取'); }
+  if (!j.ok) throw new Error(j.msg || '操作失敗');
+  return j;
+}
+
+function showTab(name) {
+  if (name !== 'scan') stopScan();
+  document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === 'tab-' + name));
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  if (name === 'list') loadPending();
+  if (name === 'res') loadRes();
+  if (name === 'set') { $('cfgUrl').value = CFG.url || ''; $('cfgPin').value = CFG.pin || ''; $('cfgStaff').value = CFG.staff || ''; }
+  window.scrollTo(0, 0);
+}
+
+/* ---------- 設定 ---------- */
+async function saveCfg() {
+  CFG.url = $('cfgUrl').value.trim();
+  CFG.pin = $('cfgPin').value.trim();
+  CFG.staff = $('cfgStaff').value.trim();
+  if (!CFG.staff) { toast('請填寫你的名字'); $('cfgStaff').focus(); return; }
+  showWho();
+  try { localStorage.setItem('pkgCfg', JSON.stringify(CFG)); } catch (e) {}
+  try { await api('ping'); toast('✅ 連線成功'); loadUnits(); showTab('add'); }
+  catch (e) { toast(e.message); }
+}
+
+function showWho() { $('who').textContent = CFG.staff ? '　·　' + CFG.staff : ''; }
+
+/* ---------- 登記 ---------- */
+['黑貓', '新竹物流', '郵局', '蝦皮', '宅配通', '嘉里', '冷藏', '大型'].forEach(c => {
+  const b = document.createElement('button'); b.type = 'button'; b.textContent = c;
+  b.onclick = () => { const n = $('note'); n.value = n.value ? n.value + '、' + c : c; };
+  $('chips').appendChild(b);
+});
+/* ---------- 照片 ---------- */
+function shrink(file) {
+  return new Promise((ok, bad) => {
+    const img = new Image();
+    img.onload = () => {
+      const max = 1600, k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      ok(c.toDataURL('image/jpeg', 0.75));
+    };
+    img.onerror = () => bad(new Error('照片讀取失敗'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function addPhotos(input) {
+  const files = [...input.files]; input.value = '';
+  for (const f of files) {
+    if (shots.length >= 10) { toast('最多 10 張'); break; }
+    try { shots.push(await shrink(f)); } catch (e) { toast(e.message); }
+  }
+  renderThumbs();
+}
+function renderThumbs() {
+  $('thumbs').innerHTML = shots.map((d, i) => '<div><img src="' + d + '"><button onclick="shots.splice(' + i + ',1);renderThumbs()">×</button></div>').join('');
+}
+function picBtn(p) {
+  PHOTOS[p.id] = p.photos || [];
+  return PHOTOS[p.id].length ? '<button class="small s-pic" onclick="openPhotos(\'' + esc(p.id) + '\')">照片 ' + PHOTOS[p.id].length + '</button>' : '';
+}
+async function openPhotos(pid) {
+  const ids = PHOTOS[pid] || [];
+  $('vTitle').textContent = '包裹照片（' + ids.length + ' 張）';
+  $('vBody').innerHTML = ids.map((id, i) => '<div class="vload" id="pv' + i + '">讀取中…</div>').join('');
+  $('viewer').classList.add('on');
+  for (let i = 0; i < ids.length; i++) {
+    if (!$('viewer').classList.contains('on')) return;
+    try {
+      if (!PIC_CACHE[ids[i]]) PIC_CACHE[ids[i]] = (await api('photo', { id: ids[i] })).data;
+      const el = $('pv' + i); if (el) el.outerHTML = '<img src="' + PIC_CACHE[ids[i]] + '">';
+    } catch (e) { const el = $('pv' + i); if (el) el.textContent = e.message; }
+  }
+}
+function closeViewer() { $('viewer').classList.remove('on'); }
+
+function stepQty(d) { const q = $('qty'); q.value = Math.max(1, (parseInt(q.value, 10) || 1) + d); }
+
+async function addPkg() {
+  const unit = $('unit').value.trim();
+  if (!unit) { toast('請輸入戶號'); $('unit').focus(); return; }
+  const btn = $('btnAdd'); btn.disabled = true; btn.textContent = shots.length ? '上傳照片中…' : '登記中…';
+  try {
+    const j = await api('addPackage', { unit: unit, qty: $('qty').value, note: $('note').value.trim(), photos: shots });
+    const pic = j.photos ? '，照片 ' + j.photos + ' 張已存檔' : '';
+    $('addResult').innerHTML = j.bound
+      ? '<div class="result ok">✅ 已登記 <b>' + esc(j.unit) + '</b>，' + j.qty + ' 件' + pic + '<br>下一步：打開「LINE 官方帳號」App，找到 <b>' + esc(j.unit) + '</b> 的聊天室，拍包裹照片傳給住戶。</div>'
+      : '<div class="result bad">✅ 已登記 <b>' + esc(j.unit) + '</b>，' + j.qty + ' 件' + pic + '<br>⚠ 這一戶還沒綁定官方賴（或尚未核准），請改用其他方式通知住戶，領取時用「未領清單」手動標記。</div>';
+    $('unit').value = ''; $('qty').value = 1; $('note').value = ''; shots = []; renderThumbs();
+  } catch (e) { toast(e.message); }
+  btn.disabled = false; btn.textContent = '登記包裹';
+}
+
+async function loadUnits() {
+  try {
+    const j = await api('residents');
+    residents = j.data;
+    const units = [...new Set(residents.filter(r => r.status === '已核准').map(r => r.unit))].sort();
+    $('unitList').innerHTML = units.map(u => '<option value="' + esc(u) + '">').join('');
+  } catch (e) {}
+}
+
+/* ---------- 未領清單 ---------- */
+async function loadPending() {
+  $('pendingList').innerHTML = '<p class="muted">讀取中…</p>';
+  try { const j = await api('pending'); pending = j.data; renderPending(); }
+  catch (e) { $('pendingList').innerHTML = '<p class="muted">' + esc(e.message) + '</p>'; }
+}
+
+function renderPending() {
+  const units = [...new Set(pending.map(p => p.unit))];
+  const total = pending.reduce((s, p) => s + p.qty, 0);
+  const old = pending.filter(p => p.days >= 3).length;
+  $('summary').innerHTML =
+    '<div><b>' + units.length + '</b><span class="muted">戶</span></div>' +
+    '<div><b>' + total + '</b><span class="muted">件未領</span></div>' +
+    '<div class="' + (old ? 'alert' : '') + '"><b>' + old + '</b><span class="muted">筆超過3天</span></div>';
+  const kw = $('search').value.trim().toUpperCase();
+  const list = pending.filter(p => !kw || p.unit.toUpperCase().includes(kw));
+  if (!list.length) { $('pendingList').innerHTML = '<p class="muted">' + (pending.length ? '找不到符合的戶號' : '🎉 目前沒有未領的包裹') + '</p>'; return; }
+  const groups = {};
+  list.forEach(p => (groups[p.unit] = groups[p.unit] || []).push(p));
+  $('pendingList').innerHTML = Object.keys(groups).map(u => {
+    const g = groups[u], n = g.reduce((s, p) => s + p.qty, 0);
+    return '<div class="group"><div class="ghead"><span>' + esc(u) + '</span><span class="muted">' + g.length + ' 筆・' + n + ' 件</span></div>' +
+      g.map(p => '<div class="item"><div>' + esc(p.time) + '・' + p.qty + ' 件' + (p.note ? '・' + esc(p.note) : '') +
+        '<span class="badge' + (p.days >= 3 ? ' old' : '') + '">' + (p.days >= 1 ? '已放 ' + p.days + ' 天' : '今天') + '</span>' + (p.by ? '<div class="muted">登記：' + esc(p.by) + '</div>' : '') + '</div>' +
+        '<div class="acts">' + picBtn(p) + '<button class="small s-ok" onclick="manualClaim(\'' + esc(p.id) + '\',\'' + esc(u) + '\')">手動領取</button>' +
+        '<button class="small s-del" onclick="delPkg(\'' + esc(p.id) + '\',\'' + esc(u) + '\')">刪除</button></div></div>').join('') +
+      '</div>';
+  }).join('');
+}
+
+async function manualClaim(id, unit) {
+  if (!confirm('確定 ' + unit + ' 這筆包裹已經領走了？\n（手動標記，適合住戶沒帶手機或沒綁定官方賴時使用）')) return;
+  try { await api('claim', { ids: [id] }); toast('✅ 已標記領取'); loadPending(); } catch (e) { toast(e.message); }
+}
+async function delPkg(id, unit) {
+  if (!confirm('確定刪除 ' + unit + ' 這筆登記？\n（只用在登記錯誤時，刪除後無法復原）')) return;
+  try { await api('deletePackage', { id: id }); toast('已刪除'); loadPending(); } catch (e) { toast(e.message); }
+}
+
+/* ---------- 掃描領取 ---------- */
+function toggleScan() { scanning ? stopScan() : startScan(); }
+
+async function startScan() {
+  $('scanResult').innerHTML = '';
+  if (!window.Html5Qrcode) { toast('掃描元件載入失敗，請重新整理頁面'); return; }
+  scanner = scanner || new Html5Qrcode('reader');
+  try {
+    await scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 240, height: 240 } }, onScan, () => {});
+    scanning = true; $('btnScan').textContent = '停止掃描';
+  } catch (e) { toast('無法開啟相機，請允許瀏覽器使用相機'); }
+}
+
+async function stopScan() {
+  if (scanner && scanning) { try { await scanner.stop(); } catch (e) {} }
+  scanning = false; if ($('btnScan')) $('btnScan').textContent = '開始掃描';
+}
+
+async function onScan(text) {
+  if (!scanning) return;
+  await stopScan();
+  if (navigator.vibrate) navigator.vibrate(80);
+  $('scanResult').innerHTML = '<p class="muted">查詢中…</p>';
+  try {
+    const j = await api('verify', { token: text });
+    curToken = j.token;
+    if (!j.data.length) { $('scanResult').innerHTML = '<div class="result bad">' + esc(j.unit) + ' 目前沒有未領的包裹。</div>'; return; }
+    $('scanResult').innerHTML =
+      '<div class="unitBig">' + esc(j.unit) + '</div>' +
+      '<p class="muted">請把下列包裹交給住戶，沒拿的請取消勾選：</p>' +
+      j.data.map(p => '<div class="check"><input type="checkbox" value="' + esc(p.id) + '" checked id="ck' + esc(p.id) + '">' +
+        '<label for="ck' + esc(p.id) + '" style="flex:1;margin:0;font-weight:400">' + esc(p.time) + ' 登記・' + p.qty + ' 件' + (p.note ? '・' + esc(p.note) : '') + (p.by ? '<div class="muted">登記：' + esc(p.by) + '</div>' : '') + '</label>' + picBtn(p) + '</div>').join('') +
+      '<button class="btn primary" onclick="confirmClaim()">確認領取</button>';
+  } catch (e) {
+    $('scanResult').innerHTML = '<div class="result bad">' + esc(e.message) + '</div>';
+  }
+}
+
+async function confirmClaim() {
+  const ids = [...document.querySelectorAll('#scanResult input:checked')].map(i => i.value);
+  if (!ids.length) { toast('請至少勾選一筆'); return; }
+  try {
+    const j = await api('claim', { token: curToken, ids: ids });
+    $('scanResult').innerHTML = '<div class="result ok">✅ 已完成領取 ' + j.count + ' 筆（經手人：' + esc(CFG.staff) + '）<br>住戶可在官方賴按「領取紀錄」查看憑證紀錄。</div>' +
+      '<button class="btn ghost" onclick="startScan()">掃描下一位</button>';
+    curToken = '';
+  } catch (e) { toast(e.message); }
+}
+
+/* ---------- 住戶 ---------- */
+async function loadRes() {
+  $('resPending').innerHTML = $('resApproved').innerHTML = '<p class="muted">讀取中…</p>';
+  try { const j = await api('residents'); residents = j.data; renderRes(); loadUnits(); }
+  catch (e) { $('resPending').innerHTML = '<p class="muted">' + esc(e.message) + '</p>'; $('resApproved').innerHTML = ''; }
+}
+
+function resRow(r, approve) {
+  return '<div class="item"><div><b>' + esc(r.unit) + '</b>　' + esc(r.name || '（未取得名稱）') +
+    '<div class="muted">申請 ' + esc(r.time) + (r.by ? '・核准：' + esc(r.by) : '') + '</div></div><div class="acts">' +
+    (approve ? '<button class="small s-ok" onclick="approve(\'' + esc(r.uid) + '\')">核准</button>' : '') +
+    '<button class="small s-del" onclick="removeRes(\'' + esc(r.uid) + '\',\'' + esc(r.unit) + '\')">刪除</button></div></div>';
+}
+
+function renderRes() {
+  const p = residents.filter(r => r.status !== '已核准');
+  $('resPending').innerHTML = p.length ? p.map(r => resRow(r, true)).join('') : '<p class="muted">目前沒有待審核的申請</p>';
+  const kw = $('resSearch').value.trim().toUpperCase();
+  const a = residents.filter(r => r.status === '已核准' && (!kw || (r.unit + (r.name || '')).toUpperCase().includes(kw)))
+    .sort((x, y) => x.unit.localeCompare(y.unit));
+  $('resApproved').innerHTML = a.length ? a.map(r => resRow(r, false)).join('') : '<p class="muted">沒有資料</p>';
+}
+
+async function approve(uid) {
+  try { await api('approve', { uid: uid }); toast('✅ 已核准'); loadRes(); } catch (e) { toast(e.message); }
+}
+async function removeRes(uid, unit) {
+  if (!confirm('確定刪除 ' + unit + ' 的綁定？\n（搬走的住戶或錯誤申請才刪除）')) return;
+  try { await api('removeResident', { uid: uid }); toast('已刪除'); loadRes(); } catch (e) { toast(e.message); }
+}
+
+/* ---------- 開始 ---------- */
+showWho();
+if (CFG.url && CFG.staff) { showTab('add'); loadUnits(); }
+else { showTab('set'); if (CFG.url) toast('請填寫你的名字（經手人）'); }
+</script>
+</body>
+</html>
